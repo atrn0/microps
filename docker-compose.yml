@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  microps:
+    build:
+      context: .
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - type: bind
+        source: .
+        target: /microps
+    working_dir: /microps
+    command: sh
