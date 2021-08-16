@@ -1,4 +1,4 @@
-#ifdef NULL_H
+#ifndef NULL_H
 #define NULL_H
 
 #include "net.h"
