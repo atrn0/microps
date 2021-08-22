@@ -110,38 +110,63 @@ void ip_dump(const uint8_t *data, size_t len) {
 }
 
 struct ip_iface *ip_iface_alloc(const char *unicast, const char *netmask) {
-  struct ip_iface *i = calloc(1, sizeof(*ip_iface));
+  struct ip_iface *i;
+  i = calloc(1, sizeof(*i));
   if (!i) {
     errorf("calloc() failure");
     return NULL;
   }
 
-  NET_IFACE(i) = NET_IFACE_FAMILY_IP;
+  NET_IFACE(i)->family = NET_IFACE_FAMILY_IP;
 
-  ip_addr_t *u;
-  if (ip_addr_pton(unicast, u) < 0) {
+  ip_addr_t u;
+  if (ip_addr_pton(unicast, &u) < 0) {
     errorf("failed to parse unicast address: %s\n", unicast);
     return NULL;
   }
-  i->unicast = *u;
+  i->unicast = u;
 
-  ip_addr_t *n;
-  if (ip_addr_pton(netmask, n) < 0) {
+  ip_addr_t n;
+  if (ip_addr_pton(netmask, &n) < 0) {
     errorf("failed to parse netmask address: %s\n", netmask);
     return NULL;
   }
-  i->netmask = *n;
+  i->netmask = n;
 
   // ホスト部のビットを全て1にする
-  i->broadcast = *u || ~*n;
+  i->broadcast = u || ~n;
 
   return i;
 }
 
 /* NOTE: must not be call after net_run() */
-int ip_iface_register(struct net_device *dev, struct ip_iface *iface) {}
+int ip_iface_register(struct net_device *dev, struct ip_iface *iface) {
+  if (net_device_add_iface(dev, NET_IFACE(iface)) < 0) {
+    errorf("failed to register network interface to device");
+    return -1;
+  }
 
-struct ip_iface *ip_iface_select(ip_addr_t addr) {}
+  iface->next = ifaces;
+  ifaces = iface;
+
+  char addr[IP_ADDR_STR_LEN];
+  infof("registered: dev=%s, unicast=%s, netmask=%s, broadcast=%s", dev->name,
+        ip_addr_ntop(iface->unicast, addr, sizeof(addr)),
+        ip_addr_ntop(iface->netmask, addr, sizeof(addr)),
+        ip_addr_ntop(iface->broadcast, addr, sizeof(addr)));
+
+  return 0;
+}
+
+// ifacesからaddrを持つインターフェイスを探す
+struct ip_iface *ip_iface_select(ip_addr_t addr) {
+  for (struct ip_iface *i = ifaces; i; i = i->next) {
+    if (i->unicast == addr) {
+      return i;
+    }
+  }
+  return NULL;
+}
 
 // IP input handler
 static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
@@ -183,7 +208,25 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
     return;
   }
 
-  debugf("dev=%s, protocol=%u, total=%u", dev->name, hdr->protocol, total);
+  // devのIPインターフェイスを取得
+  struct ip_iface *iface = (struct ip_iface *) net_device_get_iface(dev, NET_IFACE_FAMILY_IP);
+  if (!iface) {
+    errorf("IP interface not found");
+    return;
+  }
+
+  // IPアドレスの検証
+  // a. インタフェースのIPアドレス
+  // b. ブロードキャストIPアドレス（255.255.255.255）
+  // c.インタフェースが属するサブネットのブロードキャストIPアドレス（xxx.xxx.xxx.255）
+  if (hdr->dst != iface->unicast && hdr->dst != IP_ADDR_BROADCAST &&
+      hdr->dst != iface->broadcast)
+    return;
+
+  char addr[IP_ADDR_STR_LEN];
+  debugf("dev=%s, iface=%s, protocol=%u, total=%u", dev->name,
+         ip_addr_ntop(iface->unicast, addr, sizeof(addr)), hdr->protocol,
+         total);
   ip_dump(data, total);
 }
 
