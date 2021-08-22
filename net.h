@@ -26,6 +26,7 @@
 #define NET_IFACE_FAMILY_IP 1
 #define NET_IFACE_FAMILY_IPV6 2
 
+// MEMO: xx_ifaceの先頭フィールドをnet_ifaceにしておくとcastできる
 #define NET_IFACE(x) ((struct net_iface *)(x))
 
 /* NOTE: use same value as the Ethernet types */

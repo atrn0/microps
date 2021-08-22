@@ -40,6 +40,11 @@ struct ip_hdr {
 const ip_addr_t IP_ADDR_ANY = 0x00000000;       /* 0.0.0.0 */
 const ip_addr_t IP_ADDR_BROADCAST = 0xffffffff; /* 255.255.255.255 */
 
+/* NOTE: if you want to add/delete the entries after net_run(), you need to
+ * protect these lists with a mutex. */
+// 論理インターフェイス
+static struct ip_iface *ifaces;
+
 int ip_addr_pton(const char *p, ip_addr_t *n) {
   char *sp, *ep;
   long ret;
@@ -103,6 +108,40 @@ void ip_dump(const uint8_t *data, size_t len) {
 #endif
   funlockfile(stderr);
 }
+
+struct ip_iface *ip_iface_alloc(const char *unicast, const char *netmask) {
+  struct ip_iface *i = calloc(1, sizeof(*ip_iface));
+  if (!i) {
+    errorf("calloc() failure");
+    return NULL;
+  }
+
+  NET_IFACE(i) = NET_IFACE_FAMILY_IP;
+
+  ip_addr_t *u;
+  if (ip_addr_pton(unicast, u) < 0) {
+    errorf("failed to parse unicast address: %s\n", unicast);
+    return NULL;
+  }
+  i->unicast = *u;
+
+  ip_addr_t *n;
+  if (ip_addr_pton(netmask, n) < 0) {
+    errorf("failed to parse netmask address: %s\n", netmask);
+    return NULL;
+  }
+  i->netmask = *n;
+
+  // ホスト部のビットを全て1にする
+  i->broadcast = *u || ~*n;
+
+  return i;
+}
+
+/* NOTE: must not be call after net_run() */
+int ip_iface_register(struct net_device *dev, struct ip_iface *iface) {}
+
+struct ip_iface *ip_iface_select(ip_addr_t addr) {}
 
 // IP input handler
 static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
