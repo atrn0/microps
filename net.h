@@ -23,6 +23,12 @@
 #define NET_DEVICE_IS_UP(x) ((x)->flags & NET_DEVICE_FLAG_UP)
 #define NET_DEVICE_STATE(x) (NET_DEVICE_IS_UP(x) ? "up" : "down")
 
+#define NET_IFACE_FAMILY_IP 1
+#define NET_IFACE_FAMILY_IPV6 2
+
+// MEMO: xx_ifaceの先頭フィールドをnet_ifaceにしておくとcastできる
+#define NET_IFACE(x) ((struct net_iface *)(x))
+
 /* NOTE: use same value as the Ethernet types */
 #define NET_PROTOCOL_TYPE_IP 0x0800
 #define NET_PROTOCOL_TYPE_ARP 0x0806
@@ -43,6 +49,7 @@ struct net_device {
     uint8_t broadcast[NET_DEVICE_ADDR_LEN];
   };
   struct net_device_ops *ops;
+  struct net_iface *ifaces;
   void *priv;
 };
 
@@ -54,8 +61,19 @@ struct net_device_ops {
   int (*poll)(struct net_device *dev);
 };
 
+struct net_iface {
+  struct net_iface *next;
+  struct net_device *dev;
+  int family;
+  /* depends on implementation of protocols. */
+};
+
 extern struct net_device *net_device_alloc(void);
 extern int net_device_register(struct net_device *dev);
+extern int net_device_add_iface(struct net_device *dev,
+                                struct net_iface *iface);
+extern struct net_iface *net_device_get_iface(struct net_device *dev,
+                                              int family);
 extern int net_device_output(struct net_device *dev, uint16_t type,
                              const uint8_t *data, size_t len, const void *dst);
 
