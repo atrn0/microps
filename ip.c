@@ -239,6 +239,14 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
          ip_addr_ntop(iface->unicast, addr, sizeof(addr)), hdr->protocol,
          total);
   ip_dump(data, total);
+
+  for (struct ip_protocol *p = protocols; p; p = p->next) {
+    if (p->type == hdr->protocol) {
+      p->handler((const uint8_t *) hdr + hlen, hdr->total - hlen, hdr->src, hdr->dst, iface);
+      break;
+    }
+  }
+  /* unsupported protocol */
 }
 
 static int ip_output_device(struct ip_iface *iface, const uint8_t *data,
