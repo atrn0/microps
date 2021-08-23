@@ -1,8 +1,10 @@
 #include "ip.h"
 
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "net.h"
 #include "util.h"
@@ -49,7 +51,7 @@ int ip_addr_pton(const char *p, ip_addr_t *n) {
   char *sp, *ep;
   long ret;
 
-  sp = (char *)p;
+  sp = (char *) p;
   for (int idx = 0; idx < 4; idx++) {
     ret = strtol(sp, &ep, 10);  // 10進数
     if (ret < 0 || ret > 255) {
@@ -61,7 +63,7 @@ int ip_addr_pton(const char *p, ip_addr_t *n) {
     if ((idx == 3 && *ep != '\0') || (idx != 3 && *ep != '.')) {
       return -1;
     }
-    ((uint8_t *)n)[idx] = ret;
+    ((uint8_t *) n)[idx] = ret;
     sp = ep + 1;
   }
   return 0;
@@ -70,7 +72,7 @@ int ip_addr_pton(const char *p, ip_addr_t *n) {
 char *ip_addr_ntop(const ip_addr_t n, char *p, size_t size) {
   uint8_t *u8;
 
-  u8 = (uint8_t *)&n;
+  u8 = (uint8_t *) &n;
   snprintf(p, size, "%d.%d.%d.%d", u8[0], u8[1], u8[2], u8[3]);
   return p;
 }
@@ -83,7 +85,7 @@ void ip_dump(const uint8_t *data, size_t len) {
 
   // stderrをロック
   flockfile(stderr);
-  hdr = (struct ip_hdr *)data;
+  hdr = (struct ip_hdr *) data;
   v = (hdr->vhl & 0xf0) >> 4;
   hl = hdr->vhl & 0x0f;
   hlen = hl << 2; /* 32bit word to 8bit word */
@@ -177,7 +179,7 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
     errorf("too short");
     return;
   }
-  hdr = (struct ip_hdr *)data;
+  hdr = (struct ip_hdr *) data;
   // validate IP version
   if ((hdr->vhl & 0xf0) >> 4 != IP_VERSION_IPV4) {
     errorf("IP version is not IPv4");
@@ -196,7 +198,7 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
     return;
   }
   // checksum
-  if (cksum16((uint16_t *)data, hlen, 0) != 0) {
+  if (cksum16((uint16_t *) data, hlen, 0) != 0) {
     errorf("checksum not match");
     return;
   }
@@ -209,7 +211,8 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
   }
 
   // devのIPインターフェイスを取得
-  struct ip_iface *iface = (struct ip_iface *) net_device_get_iface(dev, NET_IFACE_FAMILY_IP);
+  struct ip_iface *iface =
+      (struct ip_iface *) net_device_get_iface(dev, NET_IFACE_FAMILY_IP);
   if (!iface) {
     errorf("IP interface not found");
     return;
@@ -228,6 +231,101 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
          ip_addr_ntop(iface->unicast, addr, sizeof(addr)), hdr->protocol,
          total);
   ip_dump(data, total);
+}
+
+static int ip_output_device(struct ip_iface *iface, const uint8_t *data,
+                            size_t len, ip_addr_t dst) {
+  uint8_t hwaddr[NET_DEVICE_ADDR_LEN] = {};
+
+  if (NET_IFACE(iface)->dev->flags & NET_DEVICE_FLAG_NEED_ARP) {
+    if (dst == iface->broadcast || dst == IP_ADDR_BROADCAST) {
+      memcpy(hwaddr, NET_IFACE(iface)->dev->broadcast, NET_IFACE(iface)->dev->alen);
+    } else {
+      errorf("arp does not implement");
+      return -1;
+    }
+  }
+
+  return net_device_output(NET_IFACE(iface)->dev, NET_PROTOCOL_TYPE_IP, data, len, &dst);
+}
+
+// IPデータグラムの生成、デバイスに出力
+static ssize_t ip_output_core(struct ip_iface *iface, uint8_t protocol,
+                              const uint8_t *data, size_t len, ip_addr_t src,
+                              ip_addr_t dst, uint16_t id, uint16_t offset) {
+  uint8_t buf[IP_TOTAL_SIZE_MAX];
+  struct ip_hdr *hdr = (struct ip_hdr *) buf;
+
+  uint16_t hlen = IP_HDR_SIZE_MIN; // bytes
+  hdr->vhl = IP_VERSION_IPV4 << 4 | hlen >> 2;  // Options無し
+  hdr->tos = 0;
+  uint16_t total = hton16(IP_HDR_SIZE_MIN + len);
+  hdr->total = total;
+  hdr->id = hton16(id);
+  hdr->offset = hton16(offset);
+  hdr->ttl = 255;
+  hdr->protocol = protocol;
+  hdr->src = src;
+  hdr->dst = dst;
+  hdr->sum = 0;
+  hdr->sum = cksum16((uint16_t *) hdr, hlen, 0);
+
+  buf[hlen] = *data;
+  memcpy(&buf[hlen], data, len);
+
+  char addr[IP_ADDR_STR_LEN];
+  debugf("dev=%s, iface=%s, protocol=%u, len=%u",
+         NET_IFACE(iface)->dev->name, ip_addr_ntop(dst, addr, sizeof(addr)), protocol, total);
+  ip_dump(buf, total);
+  return ip_output_device(iface, buf, total, dst);
+}
+
+static uint16_t ip_generate_id(void) {
+  static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+  static uint16_t id = 128;
+  uint16_t ret;
+
+  pthread_mutex_lock(&mutex);
+  ret = id++;
+  pthread_mutex_unlock(&mutex);
+  return ret;
+}
+
+// output data to dst
+// returns len
+ssize_t ip_output(uint8_t protocol, const uint8_t *data, size_t len,
+                  ip_addr_t src, ip_addr_t dst) {
+  struct ip_iface *iface;
+  char addr[IP_ADDR_STR_LEN];
+  uint16_t id;
+
+  if (src == IP_ADDR_ANY) {
+    // まだIPルーティングを実装していないので送信元IPアドレスが指定されない場合はエラーを返す
+    errorf("routing does not implement");
+    return -1;
+  } else {
+    iface = ip_iface_select(src);
+    if (!iface) {
+      errorf("IP interface not found: %s",
+             ip_addr_ntop(src, addr, sizeof(addr)));
+      return -1;
+    }
+    // 到達可能か確認
+    if (dst != IP_ADDR_BROADCAST &&
+        (iface->unicast & iface->netmask) != (dst & iface->netmask)) {
+      errorf("IP interface not found: %s",
+             ip_addr_ntop(src, addr, sizeof(addr)));
+      return -1;
+    }
+  }
+
+  id = ip_generate_id();
+  if (ip_output_core(iface, protocol, data, len, iface->unicast, dst, id, 0) ==
+      -1) {
+    errorf("ip_output_core() failure");
+    return -1;
+  }
+  return len;
 }
 
 int ip_init(void) {

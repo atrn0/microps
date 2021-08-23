@@ -11,20 +11,17 @@
 static volatile sig_atomic_t terminate;
 
 static void on_signal(int s) {
-  (void)s;
+  (void) s;
   terminate = 1;
 }
 
-int main(int argc, char *argv[]) {
-  struct net_device *dev;
-
-  // シグナルハンドラの設定(Ctrl+Cを押したときにon_signalが呼び出される)
-  signal(SIGINT, on_signal);
+static int setup() {
   if (net_init() == -1) {
     errorf("net_init() failure");
     return -1;
   }
-  dev = loopback_init();
+
+  struct net_device *dev = loopback_init();
   if (!dev) {
     errorf("loopback_init() failure");
     return -1;
@@ -44,14 +41,39 @@ int main(int argc, char *argv[]) {
     errorf("net_run() failure");
     return -1;
   }
+
+  return 0;
+}
+
+static void cleanup() {
+  net_shutdown();
+}
+
+int main(int argc, char *argv[]) {
+  // シグナルハンドラの設定(Ctrl+Cを押したときにon_signalが呼び出される)
+  signal(SIGINT, on_signal);
+
+  if (setup() < 0) {
+    errorf("setup() failure");
+    return -1;
+  }
+
+  ip_addr_t src, dst;
+  ip_addr_pton(LOOPBACK_IP_ADDR, &src);
+  dst = src;
+
+  size_t offset = IP_HDR_SIZE_MIN;
+
   while (!terminate) {
-    if (net_device_output(dev, NET_PROTOCOL_TYPE_IP, test_data,
-                          sizeof(test_data), NULL) == -1) {
-      errorf("net_device_output() failure");
+    if (ip_output(0x01,
+                  test_data + offset /* IPヘッダ以降 */,
+                  sizeof(test_data) - offset,
+                  src, dst) < 0) {
+      errorf("ip_output() failure");
       break;
     }
     sleep(1);
   }
-  net_shutdown();
+  cleanup();
   return 0;
 }
