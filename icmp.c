@@ -110,6 +110,7 @@ static void icmp_dump(const uint8_t *data, size_t len) {
 void icmp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct ip_iface *iface) {
   char addr1[IP_ADDR_STR_LEN];
   char addr2[IP_ADDR_STR_LEN];
+  struct icmp_hdr *hdr;
 
   if (len < ICMP_HDR_SIZE) {
     errorf("input data is too short: %d bytes", len);
@@ -125,6 +126,25 @@ void icmp_input(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, s
 
   debugf("%s => %s, len=%zu", ip_addr_ntop(src, addr1, sizeof(addr1)), ip_addr_ntop(dst, addr2, sizeof(addr2)), len);
   icmp_dump(data, len);
+
+  hdr = (struct icmp_hdr *) data;
+  switch (hdr->type) {
+    case ICMP_TYPE_ECHO:
+      if (icmp_output(ICMP_TYPE_ECHOREPLY,
+                      hdr->code,
+                      hdr->values,
+                      data + ICMP_HDR_SIZE,
+                      len - ICMP_HDR_SIZE,
+                      iface->unicast,
+                      src)
+          < 0) {
+        errorf("icmp_output() failure");
+        return;
+      }
+      break;
+    default: /* ignore */
+      break;
+  }
 }
 
 int icmp_output(uint8_t type,
