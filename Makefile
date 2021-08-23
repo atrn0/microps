@@ -1,6 +1,7 @@
 APPS = 
 
-TESTS = test/step8.exe \
+TESTS = test/step9.exe \
+#test/step8.exe \
 #	test/step0.exe \
 #	test/step1.exe \
 #	test/step2.exe \
