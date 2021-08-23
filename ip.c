@@ -39,6 +39,13 @@ struct ip_hdr {
   uint8_t options[0];
 };
 
+//IPの上位プロトコル
+struct ip_protocol {
+  struct ip_protocol *next;
+  uint8_t type;
+  void (*handler)(const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst, struct ip_iface *iface);
+};
+
 const ip_addr_t IP_ADDR_ANY = 0x00000000;       /* 0.0.0.0 */
 const ip_addr_t IP_ADDR_BROADCAST = 0xffffffff; /* 255.255.255.255 */
 
@@ -46,6 +53,7 @@ const ip_addr_t IP_ADDR_BROADCAST = 0xffffffff; /* 255.255.255.255 */
  * protect these lists with a mutex. */
 // 論理インターフェイス
 static struct ip_iface *ifaces;
+static struct ip_protocol *protocols;
 
 int ip_addr_pton(const char *p, ip_addr_t *n) {
   char *sp, *ep;
@@ -231,6 +239,14 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
          ip_addr_ntop(iface->unicast, addr, sizeof(addr)), hdr->protocol,
          total);
   ip_dump(data, total);
+
+  for (struct ip_protocol *p = protocols; p; p = p->next) {
+    if (p->type == hdr->protocol) {
+      p->handler((const uint8_t *) hdr + hlen, total - hlen, hdr->src, hdr->dst, iface);
+      return;
+    }
+  }
+  /* unsupported protocol */
 }
 
 static int ip_output_device(struct ip_iface *iface, const uint8_t *data,
@@ -326,6 +342,38 @@ ssize_t ip_output(uint8_t protocol, const uint8_t *data, size_t len,
     return -1;
   }
   return len;
+}
+
+/* NOTE: must not be call after net_run() */
+int
+ip_protocol_register(uint8_t type,
+                     void (*handler)(const uint8_t *data,
+                                     size_t len,
+                                     ip_addr_t src,
+                                     ip_addr_t dst,
+                                     struct ip_iface *iface)) {
+  //プロトコルの重複を確認
+  for (struct ip_protocol *p = protocols; p; p = p->next) {
+    if (p->type == type) {
+      errorf("protocol type %d is already registered", type);
+      return -1;
+    }
+  }
+
+  struct ip_protocol *p;
+  p = calloc(1, sizeof(*p));
+  if (!p) {
+    errorf("calloc() failure");
+    return -1;
+  }
+
+  p->type = type;
+  p->handler = handler;
+  p->next = protocols;
+  protocols = p;
+
+  infof("registered, type=%u", p->type);
+  return 0;
 }
 
 int ip_init(void) {
