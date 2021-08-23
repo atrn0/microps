@@ -242,8 +242,8 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
 
   for (struct ip_protocol *p = protocols; p; p = p->next) {
     if (p->type == hdr->protocol) {
-      p->handler((const uint8_t *) hdr + hlen, hdr->total - hlen, hdr->src, hdr->dst, iface);
-      break;
+      p->handler((const uint8_t *) hdr + hlen, total - hlen, hdr->src, hdr->dst, iface);
+      return;
     }
   }
   /* unsupported protocol */
@@ -370,7 +370,7 @@ ip_protocol_register(uint8_t type,
   p->type = type;
   p->handler = handler;
   p->next = protocols;
-  protocols->next = p;
+  protocols = p;
 
   infof("registered, type=%u", p->type);
   return 0;

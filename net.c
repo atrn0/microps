@@ -10,6 +10,7 @@
 
 #include "ip.h"
 #include "util.h"
+#include "icmp.h"
 
 struct net_protocol {
   struct net_protocol *next;
@@ -239,8 +240,8 @@ static void *net_thread(void *arg) {
       if (entry) {
         debugf("queue popped (num:%u), dev=%s, type=0x%04x, len=%zd", num,
                entry->dev->name, proto->type, entry->len);
-        debugdump((uint8_t *)(entry + 1), entry->len);
-        proto->handler((uint8_t *)(entry + 1), entry->len, entry->dev);
+        debugdump((uint8_t *) (entry + 1), entry->len);
+        proto->handler((uint8_t *) (entry + 1), entry->len, entry->dev);
         free(entry);
         count++;
       }
@@ -298,6 +299,11 @@ void net_shutdown(void) {
 int net_init(void) {
   if (ip_init() == -1) {
     errorf("ip_init() failure");
+    return -1;
+  }
+
+  if (icmp_init() == -1) {
+    errorf("icmp_init() failure");
     return -1;
   }
   return 0;
