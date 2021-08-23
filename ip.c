@@ -344,7 +344,28 @@ ip_protocol_register(uint8_t type,
                                      ip_addr_t src,
                                      ip_addr_t dst,
                                      struct ip_iface *iface)) {
+  //プロトコルの重複を確認
+  for (struct ip_protocol *p = protocols; p; p = p->next) {
+    if (p->type == type) {
+      errorf("protocol type %d is already registered", type);
+      return -1;
+    }
+  }
 
+  struct ip_protocol *p;
+  p = calloc(1, sizeof(*p));
+  if (!p) {
+    errorf("calloc() failure");
+    return -1;
+  }
+
+  p->type = type;
+  p->handler = handler;
+  p->next = protocols;
+  protocols->next = p;
+
+  infof("registered, type=%u", p->type);
+  return 0;
 }
 
 int ip_init(void) {
