@@ -246,6 +246,7 @@ static int ip_output_device(struct ip_iface *iface, const uint8_t *data,
     }
   }
 
+  return net_device_output(NET_IFACE(iface)->dev, NET_PROTOCOL_TYPE_IP, data, len, &dst);
 }
 
 // IPデータグラムの生成、デバイスに出力
@@ -260,7 +261,7 @@ static ssize_t ip_output_core(struct ip_iface *iface, uint8_t protocol,
   hdr->tos = 0;
   uint16_t total = hton16(IP_HDR_SIZE_MIN + len);
   hdr->total = total;
-  hdr->id = id;
+  hdr->id = hton16(id);
   hdr->offset = hton16(offset);
   hdr->ttl = 255;
   hdr->protocol = protocol;
