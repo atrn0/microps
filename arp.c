@@ -69,9 +69,32 @@ static int arp_reply(struct net_iface *iface, const uint8_t *tha, ip_addr_t tpa,
 }
 
 static void arp_input(const uint8_t *data, size_t len, struct net_device *dev) {
+  struct arp_ether *msg;
 
+  if (len < sizeof(*msg)) {
+    errorf("too short");
+    return;
+  }
+
+  msg = (struct arp_ether *) data;
+  if (msg->hdr.hrd != ARP_HRD_ETHER || msg->hdr.hln != ETHER_ADDR_LEN) {
+    debugf("unknown hardware address type: type=0x%04x, len=%d", msg->hdr.hrd, msg->hdr.hln);
+    return;
+  }
+
+  if (msg->hdr.pro != ARP_PRO_IP || msg->hdr.pln != IP_ADDR_LEN) {
+    debugf("unknown protocol address type: type=0x%04x, len=%d", msg->hdr.hrd, msg->hdr.hln);
+    return;
+  }
+
+  debugf("dev=%s, len=%zu", dev->name, len);
+  arp_dump(data, len);
 }
 
 int arp_init(void) {
-
+  if (net_protocol_register(NET_PROTOCOL_TYPE_ARP, arp_input) == -1) {
+    errorf("net_protocol_register() failure");
+    return -1;
+  }
+  return 0;
 }
