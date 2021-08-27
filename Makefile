@@ -1,32 +1,21 @@
 APPS = 
 
-TESTS = test/step10.exe \
-#	test/step9.exe \
-#	test/step8.exe \
-#	test/step0.exe \
-#	test/step1.exe \
-#	test/step2.exe \
-#	test/step3.exe \
-#	test/step4.exe \
-#	test/step5.exe \
-#	test/step6.exe \
-#	test/step7.exe \
-#	test/tmp.exe \
+TESTS = test/step11.exe \
 
 DRIVERS = driver/null.o \
-          driver/loopback.o
+          driver/loopback.o \
 
 OBJS = util.o \
        net.o \
        ip.o \
-       icmp.o
+       icmp.o \
+       ether.o \
 
-
-CFLAGS := $(CFLAGS) -g -W -Wall -Wno-unused-parameter -I .
+CFLAGS := $(CFLAGS) -v -g -W -Wall -Wno-unused-parameter -I .
 
 ifeq ($(shell uname),Linux)
        CFLAGS := $(CFLAGS) -pthread
-       DRIVERS := $(DRIVERS)
+       DRIVERS := $(DRIVERS) driver/ether_tap_linux.o
 endif
 
 ifeq ($(shell uname),Darwin)
