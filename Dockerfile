@@ -17,5 +17,5 @@ RUN echo 'user ALL=(root) NOPASSWD:ALL' > /etc/sudoers.d/user
 USER user
 WORKDIR /microps
 
-COPY --chown=user:user . .
+COPY --chown=user:user docker-entrypoint.sh .
 RUN sudo chmod u+x ./docker-entrypoint.sh
