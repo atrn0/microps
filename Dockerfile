@@ -15,4 +15,7 @@ RUN apt update \
 
 RUN echo 'user ALL=(root) NOPASSWD:ALL' > /etc/sudoers.d/user
 USER user
-WORKDIR /home/user
+WORKDIR /microps
+
+COPY --chown=user:user . .
+RUN sudo chmod u+x ./docker-entrypoint.sh
