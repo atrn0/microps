@@ -26,10 +26,10 @@ struct arp_hdr {
 
 struct arp_ether {
   struct arp_hdr hdr;
-  uint8_t sha[ETHER_ADDR_LEN];
-  uint8_t spa[IP_ADDR_LEN];
-  uint8_t tha[ETHER_ADDR_LEN];
-  uint8_t tpa[IP_ADDR_LEN];
+  uint8_t sha[ETHER_ADDR_LEN]; /* Sender Hardware Address */
+  uint8_t spa[IP_ADDR_LEN]; /* Sender Protocol Address */
+  uint8_t tha[ETHER_ADDR_LEN]; /* Target Hardware Address */
+  uint8_t tpa[IP_ADDR_LEN]; /* Target Protocol Address */
 };
 
 static char *arp_opcode_ntoa(uint16_t opcode) {
@@ -65,11 +65,27 @@ static void arp_dump(const uint8_t *data, size_t len) {
 }
 
 static int arp_reply(struct net_iface *iface, const uint8_t *tha, ip_addr_t tpa, const uint8_t *dst) {
+  struct arp_ether reply;
 
+  reply.hdr.hrd = hton16(ARP_HRD_ETHER);
+  reply.hdr.pro = hton16(ARP_PRO_IP);
+  reply.hdr.hln = ETHER_ADDR_LEN;
+  reply.hdr.pln = IP_ADDR_LEN;
+  reply.hdr.op = hton16(ARP_OP_REPLY);
+  memcpy(reply.sha, iface->dev->addr, ETHER_ADDR_LEN);
+  memcpy(reply.spa, &((struct ip_iface *) iface)->unicast, IP_ADDR_LEN);
+  memcpy(reply.tha, tha, ETHER_ADDR_LEN);
+  memcpy(reply.tpa, &tpa, IP_ADDR_LEN);
+
+  debugf("dev=%s, len=%zu", iface->dev->name, sizeof(reply));
+  arp_dump((uint8_t *) &reply, sizeof(reply));
+  return net_device_output(iface->dev, ETHER_TYPE_ARP, (uint8_t *) &reply, sizeof(reply), dst);
 }
 
 static void arp_input(const uint8_t *data, size_t len, struct net_device *dev) {
   struct arp_ether *msg;
+  ip_addr_t spa, tpa;
+  struct net_iface *iface;
 
   if (len < sizeof(*msg)) {
     errorf("too short");
@@ -77,18 +93,32 @@ static void arp_input(const uint8_t *data, size_t len, struct net_device *dev) {
   }
 
   msg = (struct arp_ether *) data;
-  if (msg->hdr.hrd != ARP_HRD_ETHER || msg->hdr.hln != ETHER_ADDR_LEN) {
+  if (ntoh16(msg->hdr.hrd) != ARP_HRD_ETHER || msg->hdr.hln != ETHER_ADDR_LEN) {
     debugf("unknown hardware address type: type=0x%04x, len=%d", msg->hdr.hrd, msg->hdr.hln);
     return;
   }
 
-  if (msg->hdr.pro != ARP_PRO_IP || msg->hdr.pln != IP_ADDR_LEN) {
+  if (ntoh16(msg->hdr.pro) != ARP_PRO_IP || msg->hdr.pln != IP_ADDR_LEN) {
     debugf("unknown protocol address type: type=0x%04x, len=%d", msg->hdr.hrd, msg->hdr.hln);
     return;
   }
 
   debugf("dev=%s, len=%zu", dev->name, len);
   arp_dump(data, len);
+
+  memcpy(&spa, msg->spa, sizeof(spa));
+  memcpy(&tpa, msg->tpa, sizeof(tpa));
+  iface = net_device_get_iface(dev, NET_IFACE_FAMILY_IP);
+  if (iface && ((struct ip_iface *) iface)->unicast == tpa) {
+    if (ntoh16(msg->hdr.op) == ARP_OP_REQUEST) {
+      if (arp_reply(iface, msg->sha, spa, msg->sha) == -1) {
+        errorf("arp_reply() failure");
+        return;
+      }
+    }
+    // TODO: ARP_OP_REPLY
+    warnf("Unknown arp operation code: 0x%04x", ntoh16(msg->hdr.op));
+  }
 }
 
 int arp_init(void) {

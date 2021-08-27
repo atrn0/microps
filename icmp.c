@@ -1,4 +1,5 @@
 #include <string.h>
+
 #include "icmp.h"
 #include "ip.h"
 #include "util.h"
@@ -157,7 +158,7 @@ int icmp_output(uint8_t type,
   uint8_t buf[ICMP_BUFSIZ];
   struct icmp_hdr *hdr;
   size_t msg_len = ICMP_HDR_SIZE + len;
-  char addr[IP_ADDR_STR_LEN];
+  char addr1[IP_ADDR_STR_LEN], addr2[IP_ADDR_STR_LEN];
 
   hdr = (struct icmp_hdr *) buf;
   hdr->type = type;
@@ -168,8 +169,8 @@ int icmp_output(uint8_t type,
   hdr->sum = cksum16((uint16_t *) buf, msg_len, 0);
 
   debugf("%s => %s, len=%zu",
-         ip_addr_ntop(src, addr, sizeof(addr)),
-         ip_addr_ntop(dst, addr, sizeof(addr)),
+         ip_addr_ntop(src, addr1, sizeof(addr1)),
+         ip_addr_ntop(dst, addr2, sizeof(addr2)),
          msg_len);
   icmp_dump((uint8_t *) hdr, msg_len);
   return ip_output(IP_PROTOCOL_ICMP, buf, msg_len, src, dst);
