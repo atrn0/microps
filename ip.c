@@ -8,6 +8,7 @@
 
 #include "net.h"
 #include "util.h"
+#include "arp.h"
 
 //   0                   1                   2                   3
 //   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -252,13 +253,16 @@ static void ip_input(const uint8_t *data, size_t len, struct net_device *dev) {
 static int ip_output_device(struct ip_iface *iface, const uint8_t *data,
                             size_t len, ip_addr_t dst) {
   uint8_t hwaddr[NET_DEVICE_ADDR_LEN] = {};
+  int ret;
 
   if (NET_IFACE(iface)->dev->flags & NET_DEVICE_FLAG_NEED_ARP) {
     if (dst == iface->broadcast || dst == IP_ADDR_BROADCAST) {
       memcpy(hwaddr, NET_IFACE(iface)->dev->broadcast, NET_IFACE(iface)->dev->alen);
     } else {
-      errorf("arp does not implement");
-      return -1;
+      ret = arp_resolve(NET_IFACE(iface), dst, hwaddr);
+      if (ret != ARP_RESOLVE_FOUND) {
+        return ret;
+      }
     }
   }
 
@@ -275,8 +279,8 @@ static ssize_t ip_output_core(struct ip_iface *iface, uint8_t protocol,
   uint16_t hlen = IP_HDR_SIZE_MIN; // bytes
   hdr->vhl = IP_VERSION_IPV4 << 4 | hlen >> 2;  // Options無し
   hdr->tos = 0;
-  uint16_t total = hton16(IP_HDR_SIZE_MIN + len);
-  hdr->total = total;
+  uint16_t total = IP_HDR_SIZE_MIN + len;
+  hdr->total = hton16(total);
   hdr->id = hton16(id);
   hdr->offset = hton16(offset);
   hdr->ttl = 255;
