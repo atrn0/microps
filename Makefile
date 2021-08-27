@@ -10,6 +10,7 @@ OBJS = util.o \
        ip.o \
        icmp.o \
        ether.o \
+       arp.o \
 
 CFLAGS := $(CFLAGS) -v -g -W -Wall -Wno-unused-parameter -I .
 
