@@ -6,9 +6,7 @@ services:
       context: .
     cap_add:
       - NET_ADMIN
-    volumes:
-      - type: bind
-        source: .
-        target: /microps
     working_dir: /microps
-    command: sh
+    command: ./docker-entrypoint.sh
+    privileged: true
+    container_name: microps
