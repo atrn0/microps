@@ -266,7 +266,7 @@ static int ip_output_device(struct ip_iface *iface, const uint8_t *data,
     }
   }
 
-  return net_device_output(NET_IFACE(iface)->dev, NET_PROTOCOL_TYPE_IP, data, len, &dst);
+  return net_device_output(NET_IFACE(iface)->dev, NET_PROTOCOL_TYPE_IP, data, len, hwaddr);
 }
 
 // IPデータグラムの生成、デバイスに出力

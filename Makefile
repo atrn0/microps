@@ -1,6 +1,6 @@
 APPS = 
 
-TESTS = test/step13.exe \
+TESTS = test/step14.exe \
 
 DRIVERS = driver/null.o \
           driver/loopback.o \
@@ -12,7 +12,7 @@ OBJS = util.o \
        arp.o \
        icmp.o \
 
-CFLAGS := $(CFLAGS) -v -g -W -Wall -Wno-unused-parameter -I .
+CFLAGS := $(CFLAGS) -v -g -W -Wall -Wno-unused-parameter -D_DEFAULT_SOURCE -I .
 
 ifeq ($(shell uname),Linux)
        CFLAGS := $(CFLAGS) -pthread
