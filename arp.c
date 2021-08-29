@@ -107,8 +107,7 @@ static struct arp_cache *arp_cache_alloc(void) {
 static struct arp_cache *arp_cache_select(ip_addr_t pa) {
   struct arp_cache *entry;
   for (entry = caches; entry < tailof(caches); entry++) {
-    if (entry->pa == pa) {
-      pthread_mutex_unlock(&mutex);
+    if (entry->state != ARP_CACHE_STATE_FREE && entry->pa == pa) {
       return entry;
     }
   }
@@ -296,13 +295,33 @@ int arp_resolve(struct net_iface *iface, ip_addr_t pa, uint8_t *ha) {
 }
 
 static void arp_timer(void) {
+  struct arp_cache *entry;
+  struct timeval now, diff;
 
+  pthread_mutex_lock(&mutex);
+  gettimeofday(&now, NULL);
+  for (entry = caches; entry < tailof(caches); entry++) {
+    if (entry->state != ARP_CACHE_STATE_FREE && entry->state != ARP_CACHE_STATE_STATIC) {
+      timersub(&now, &entry->timestamp, &diff);
+      if (diff.tv_sec > 5) {
+        arp_cache_delete(entry);
+      }
+    }
+  }
+  pthread_mutex_unlock(&mutex);
 }
 
 int arp_init(void) {
+  struct timeval interval = {1, 0};
   if (net_protocol_register(NET_PROTOCOL_TYPE_ARP, arp_input) == -1) {
     errorf("net_protocol_register() failure");
     return -1;
   }
+
+  if (net_timer_register(interval, arp_timer) == -1) {
+    errorf("net_timer_register() failure");
+    return -1;
+  };
+
   return 0;
 }

@@ -236,7 +236,7 @@ int net_timer_register(struct timeval interval, void (*handler)(void)) {
   return 0;
 }
 
-#define NET_THREAD_SLEEP_TIME 1000 /* micro seconds */
+#define NET_THREAD_SLEEP_TIME 100 /* micro seconds */
 
 // ポーリングのためのスレッド
 // 本来kernelではソフトウェア割り込みによって処理する
@@ -248,6 +248,8 @@ static void *net_thread(void *arg) {
   struct net_device *dev;
   struct net_protocol *proto;
   struct net_protocol_queue_entry *entry;
+  struct net_timer *timer;
+  struct timeval now, diff;
 
   while (!terminate) {
     count = 0;
@@ -276,6 +278,15 @@ static void *net_thread(void *arg) {
         count++;
       }
     }
+    for (timer = timers; timer; timer = timer->next) {
+      gettimeofday(&now, NULL);
+      timersub(&now, &timer->last, &diff);
+      if (timercmp(&timer->interval, &diff, <) != 0) { /* true (!0) or false (0) */
+        timer->handler();
+        gettimeofday(&timer->last, NULL);
+      }
+    }
+
     // 何も処理が行われなかったとき
     if (!count) {
       usleep(NET_THREAD_SLEEP_TIME);

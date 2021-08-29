@@ -1,6 +1,6 @@
 APPS = 
 
-TESTS = test/step14.exe \
+TESTS = test/step15.exe \
 
 DRIVERS = driver/null.o \
           driver/loopback.o \
@@ -38,7 +38,7 @@ $(TESTS): %.exe : %.o $(OBJS) $(DRIVERS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 .c.o:
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -I./include -c $< -o $@
 
 clean:
 	rm -rf $(APPS) $(APPS:.exe=.o) $(OBJS) $(DRIVERS) $(TESTS) $(TESTS:.exe=.o)
