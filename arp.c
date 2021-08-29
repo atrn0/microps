@@ -303,7 +303,7 @@ static void arp_timer(void) {
   for (entry = caches; entry < tailof(caches); entry++) {
     if (entry->state != ARP_CACHE_STATE_FREE && entry->state != ARP_CACHE_STATE_STATIC) {
       timersub(&now, &entry->timestamp, &diff);
-      if (diff.tv_sec > 5) {
+      if (diff.tv_sec > ARP_CACHE_TIMEOUT) {
         arp_cache_delete(entry);
       }
     }
