@@ -10,6 +10,8 @@ RUN apt update \
   netcat-openbsd \
   git \
   sudo \
+  tcpdump \
+  iptables \
   && apt clean -y \
   && rm -rf /var/lib/apt/lists
 
