@@ -7,10 +7,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/time.h>
 
 #include "ip.h"
 #include "util.h"
 #include "icmp.h"
+#include "arp.h"
 
 struct net_protocol {
   struct net_protocol *next;
@@ -27,9 +29,18 @@ struct net_protocol_queue_entry {
   size_t len;
 };
 
+struct net_timer {
+  struct net_timer *next;
+  struct timeval interval;
+  struct timeval last;
+  void (*handler)(void);
+};
+
+/* NOTE: if you want to add/delete the entries after net_run(), you need to protect these lists with a mutex. */
 static struct net_device *devices;
 // ネットワーク層のプロトコルリスト
 static struct net_protocol *protocols;
+static struct net_timer *timers;
 
 struct net_device *net_device_alloc(void) {
   struct net_device *dev;
@@ -206,7 +217,26 @@ int net_protocol_register(uint16_t type,
   return 0;
 }
 
-#define NET_THREAD_SLEEP_TIME 1000 /* micro seconds */
+/* NOTE: must not be call after net_run() */
+int net_timer_register(struct timeval interval, void (*handler)(void)) {
+  struct net_timer *timer;
+
+  timer = calloc(1, sizeof(*timer));
+  if (!timer) {
+    errorf("calloc() failure");
+    return -1;
+  }
+  timer->interval = interval;
+  gettimeofday(&timer->last, NULL);
+  timer->handler = handler;
+  timer->next = timers;
+  timers = timer;
+
+  infof("registered: interval={%d, %d}", interval.tv_sec, interval.tv_usec);
+  return 0;
+}
+
+#define NET_THREAD_SLEEP_TIME 100 /* micro seconds */
 
 // ポーリングのためのスレッド
 // 本来kernelではソフトウェア割り込みによって処理する
@@ -218,6 +248,8 @@ static void *net_thread(void *arg) {
   struct net_device *dev;
   struct net_protocol *proto;
   struct net_protocol_queue_entry *entry;
+  struct net_timer *timer;
+  struct timeval now, diff;
 
   while (!terminate) {
     count = 0;
@@ -246,6 +278,15 @@ static void *net_thread(void *arg) {
         count++;
       }
     }
+    for (timer = timers; timer; timer = timer->next) {
+      gettimeofday(&now, NULL);
+      timersub(&now, &timer->last, &diff);
+      if (timercmp(&timer->interval, &diff, <) != 0) { /* true (!0) or false (0) */
+        timer->handler();
+        gettimeofday(&timer->last, NULL);
+      }
+    }
+
     // 何も処理が行われなかったとき
     if (!count) {
       usleep(NET_THREAD_SLEEP_TIME);
@@ -306,5 +347,11 @@ int net_init(void) {
     errorf("icmp_init() failure");
     return -1;
   }
+
+  if (arp_init() == -1) {
+    errorf("arp_init() failure");
+    return -1;
+  }
+
   return 0;
 }

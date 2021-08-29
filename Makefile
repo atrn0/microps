@@ -1,6 +1,6 @@
 APPS = 
 
-TESTS = test/step11.exe \
+TESTS = test/step15.exe \
 
 DRIVERS = driver/null.o \
           driver/loopback.o \
@@ -8,10 +8,11 @@ DRIVERS = driver/null.o \
 OBJS = util.o \
        net.o \
        ip.o \
-       icmp.o \
        ether.o \
+       arp.o \
+       icmp.o \
 
-CFLAGS := $(CFLAGS) -v -g -W -Wall -Wno-unused-parameter -I .
+CFLAGS := $(CFLAGS) -v -g -W -Wall -Wno-unused-parameter -D_DEFAULT_SOURCE -I .
 
 ifeq ($(shell uname),Linux)
        CFLAGS := $(CFLAGS) -pthread
@@ -37,7 +38,7 @@ $(TESTS): %.exe : %.o $(OBJS) $(DRIVERS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 .c.o:
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -I./include -c $< -o $@
 
 clean:
 	rm -rf $(APPS) $(APPS:.exe=.o) $(OBJS) $(DRIVERS) $(TESTS) $(TESTS:.exe=.o)

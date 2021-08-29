@@ -10,3 +10,7 @@ services:
     command: ./docker-entrypoint.sh
     privileged: true
     container_name: microps
+    volumes:
+      - type: bind
+        source: .
+        target: /microps
