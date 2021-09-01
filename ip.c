@@ -90,7 +90,7 @@ int ip_addr_pton(const char *p, ip_addr_t *n) {
 char *ip_addr_ntop(const ip_addr_t n, char *p, size_t size) {
   uint8_t *u8;
 
-  u8 = (uint8_t *) &n;
+  u8 = (uint8_t * ) & n;
   snprintf(p, size, "%d.%d.%d.%d", u8[0], u8[1], u8[2], u8[3]);
   return p;
 }
@@ -232,6 +232,11 @@ struct ip_iface *ip_iface_alloc(const char *unicast, const char *netmask) {
 int ip_iface_register(struct net_device *dev, struct ip_iface *iface) {
   if (net_device_add_iface(dev, NET_IFACE(iface)) < 0) {
     errorf("failed to register network interface to device");
+    return -1;
+  }
+
+  if (!ip_route_add(iface->unicast & iface->netmask, iface->netmask, IP_ADDR_ANY, iface)) {
+    errorf("ip_route_add() failure");
     return -1;
   }
 
@@ -403,8 +408,6 @@ ssize_t ip_output(uint8_t protocol, const uint8_t *data, size_t len,
     errorf("source address is required for broadcast address");
     return -1;
   }
-  char addr2[IP_ADDR_STR_LEN];
-  errorf("dst=%s", ip_addr_ntop(dst, addr2, sizeof(addr2)));
 
   route = ip_route_lookup(dst);
   if (!route) {
