@@ -90,7 +90,7 @@ int ip_addr_pton(const char *p, ip_addr_t *n) {
 char *ip_addr_ntop(const ip_addr_t n, char *p, size_t size) {
   uint8_t *u8;
 
-  u8 = (uint8_t *) &n;
+  u8 = (uint8_t * ) & n;
   snprintf(p, size, "%d.%d.%d.%d", u8[0], u8[1], u8[2], u8[3]);
   return p;
 }
@@ -235,14 +235,19 @@ int ip_iface_register(struct net_device *dev, struct ip_iface *iface) {
     return -1;
   }
 
+  if (!ip_route_add(iface->unicast & iface->netmask, iface->netmask, IP_ADDR_ANY, iface)) {
+    errorf("ip_route_add() failure");
+    return -1;
+  }
+
   iface->next = ifaces;
   ifaces = iface;
 
-  char addr[IP_ADDR_STR_LEN];
+  char addr1[IP_ADDR_STR_LEN], addr2[IP_ADDR_STR_LEN], addr3[IP_ADDR_STR_LEN];
   infof("registered: dev=%s, unicast=%s, netmask=%s, broadcast=%s", dev->name,
-        ip_addr_ntop(iface->unicast, addr, sizeof(addr)),
-        ip_addr_ntop(iface->netmask, addr, sizeof(addr)),
-        ip_addr_ntop(iface->broadcast, addr, sizeof(addr)));
+        ip_addr_ntop(iface->unicast, addr1, sizeof(addr1)),
+        ip_addr_ntop(iface->netmask, addr2, sizeof(addr2)),
+        ip_addr_ntop(iface->broadcast, addr3, sizeof(addr3)));
 
   return 0;
 }
@@ -403,6 +408,7 @@ ssize_t ip_output(uint8_t protocol, const uint8_t *data, size_t len,
     errorf("source address is required for broadcast address");
     return -1;
   }
+
   route = ip_route_lookup(dst);
   if (!route) {
     errorf("no route to host, addr=%s", ip_addr_ntop(dst, addr, sizeof(addr)));
@@ -430,13 +436,12 @@ ssize_t ip_output(uint8_t protocol, const uint8_t *data, size_t len,
 }
 
 /* NOTE: must not be call after net_run() */
-int
-ip_protocol_register(uint8_t type,
-                     void (*handler)(const uint8_t *data,
-                                     size_t len,
-                                     ip_addr_t src,
-                                     ip_addr_t dst,
-                                     struct ip_iface *iface)) {
+int ip_protocol_register(uint8_t type,
+                         void (*handler)(const uint8_t *data,
+                                         size_t len,
+                                         ip_addr_t src,
+                                         ip_addr_t dst,
+                                         struct ip_iface *iface)) {
   //プロトコルの重複を確認
   for (struct ip_protocol *p = protocols; p; p = p->next) {
     if (p->type == type) {
