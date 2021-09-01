@@ -238,11 +238,11 @@ int ip_iface_register(struct net_device *dev, struct ip_iface *iface) {
   iface->next = ifaces;
   ifaces = iface;
 
-  char addr[IP_ADDR_STR_LEN];
+  char addr1[IP_ADDR_STR_LEN], addr2[IP_ADDR_STR_LEN], addr3[IP_ADDR_STR_LEN];
   infof("registered: dev=%s, unicast=%s, netmask=%s, broadcast=%s", dev->name,
-        ip_addr_ntop(iface->unicast, addr, sizeof(addr)),
-        ip_addr_ntop(iface->netmask, addr, sizeof(addr)),
-        ip_addr_ntop(iface->broadcast, addr, sizeof(addr)));
+        ip_addr_ntop(iface->unicast, addr1, sizeof(addr1)),
+        ip_addr_ntop(iface->netmask, addr2, sizeof(addr2)),
+        ip_addr_ntop(iface->broadcast, addr3, sizeof(addr3)));
 
   return 0;
 }
@@ -403,6 +403,9 @@ ssize_t ip_output(uint8_t protocol, const uint8_t *data, size_t len,
     errorf("source address is required for broadcast address");
     return -1;
   }
+  char addr2[IP_ADDR_STR_LEN];
+  errorf("dst=%s", ip_addr_ntop(dst, addr2, sizeof(addr2)));
+
   route = ip_route_lookup(dst);
   if (!route) {
     errorf("no route to host, addr=%s", ip_addr_ntop(dst, addr, sizeof(addr)));
