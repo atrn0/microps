@@ -129,7 +129,7 @@ ssize_t udp_output(struct udp_endpoint *src, struct udp_endpoint *dst,
   hdr = (struct udp_hdr *) buf;
   hdr->src = src->port;
   hdr->dst = dst->port;
-  hdr->len = hton16(len);
+  hdr->len = hton16(total);
   hdr->sum = 0;
   hdr->sum = cksum16((uint16_t *) hdr, total, psum);
 
