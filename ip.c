@@ -430,13 +430,12 @@ ssize_t ip_output(uint8_t protocol, const uint8_t *data, size_t len,
 }
 
 /* NOTE: must not be call after net_run() */
-int
-ip_protocol_register(uint8_t type,
-                     void (*handler)(const uint8_t *data,
-                                     size_t len,
-                                     ip_addr_t src,
-                                     ip_addr_t dst,
-                                     struct ip_iface *iface)) {
+int ip_protocol_register(uint8_t type,
+                         void (*handler)(const uint8_t *data,
+                                         size_t len,
+                                         ip_addr_t src,
+                                         ip_addr_t dst,
+                                         struct ip_iface *iface)) {
   //プロトコルの重複を確認
   for (struct ip_protocol *p = protocols; p; p = p->next) {
     if (p->type == type) {
