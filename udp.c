@@ -275,9 +275,9 @@ ssize_t udp_output(struct udp_endpoint *src, struct udp_endpoint *dst,
   hdr->dst = dst->port;
   hdr->len = hton16(total);
   hdr->sum = 0;
-  hdr->sum = cksum16((uint16_t *) hdr, total, psum);
-
   memcpy(buf + sizeof(*hdr), data, len);
+
+  hdr->sum = cksum16((uint16_t *) buf, total, psum);
 
   debugf("%s => %s, len=%zu (payload=%zu)",
          udp_endpoint_ntop(src, ep1, sizeof(ep1)), udp_endpoint_ntop(dst, ep2, sizeof(ep2)), total, len);
