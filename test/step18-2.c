@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <signal.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "util.h"
 #include "net.h"
@@ -21,6 +22,7 @@ on_signal(int s) {
   (void) s;
   terminate = 1;
   net_interrupt();
+  close(0);
 }
 
 static int setup(void) {
@@ -76,40 +78,32 @@ static void cleanup(void) {
 
 int main(int argc, char *argv[]) {
   int soc;
-  struct udp_endpoint local, foreign;
+  struct udp_endpoint foreign;
   uint8_t buf[1024];
-  char ep[UDP_ENDPOINT_STR_LEN];
-  ssize_t ret;
 
   signal(SIGINT, on_signal);
   if (setup() == -1) {
     errorf("setup() failure");
     return -1;
   }
+
   soc = udp_open();
   if (soc == -1) {
     errorf("udp_open() failure");
     return -1;
   }
-  udp_endpoint_pton("0.0.0.0:7", &local);
-  if (udp_bind(soc, &local) == -1) {
-    errorf("udp_bind() failure");
-    return -1;
-  }
-  debugf("waiting for data...");
+  udp_endpoint_pton("192.0.2.1:10007", &foreign);
   while (!terminate) {
-    ret = udp_recvfrom(soc, buf, sizeof(buf), &foreign);
-    if (ret <= 0) {
+    if (!fgets((char *) buf, sizeof(buf), stdin)) {
       break;
     }
-    infof("%zu bytes data form %s", ret, udp_endpoint_ntop(&foreign, ep, sizeof(ep)));
-    hexdump(stderr, buf, ret);
-    if (udp_sendto(soc, buf, ret, &foreign) == -1) {
+    if (udp_sendto(soc, buf, strlen((char *) buf), &foreign) == -1) {
       errorf("udp_sendto() failure");
       break;
     }
   }
   udp_close(soc);
+
   cleanup();
   return 0;
 }

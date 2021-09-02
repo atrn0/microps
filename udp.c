@@ -171,13 +171,13 @@ static struct udp_queue_entry *udp_pcb_queue_pop(struct udp_pcb *pcb) {
   while (!net_interrupt_occurred(ctx)) {
     entry = (struct udp_queue_entry *) queue_pop(&pcb->queue);
     if (entry) break;
-  }
-  clock_gettime(CLOCK_REALTIME, &timeout);
-  timespec_add_nsec(&timeout, 10000000); /* 10ms */
-  pcb->wait++;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    timespec_add_nsec(&timeout, 10000000); /* 10ms */
+    pcb->wait++;
 //  別スレッドから通知が来るまで待機
-  pthread_cond_timedwait(&pcb->cond, &mutex, &timeout);
-  pcb->wait--;
+    pthread_cond_timedwait(&pcb->cond, &mutex, &timeout);
+    pcb->wait--;
+  }
   net_interrupt_unsubscribe(ctx);
   return entry;
 }
@@ -222,9 +222,7 @@ static void udp_input(const uint8_t *data, size_t len, ip_addr_t src,
          len - sizeof(*hdr));
   udp_dump(data, len);
 
-  infof("atrn0aaa");
   pthread_mutex_lock(&mutex);
-  infof("atrn0");
   pcb = udp_pcb_select(dst, hdr->dst);
   if (!pcb) {
     /* port is not in use */
@@ -240,7 +238,7 @@ static void udp_input(const uint8_t *data, size_t len, ip_addr_t src,
   entry->foreign.addr = src;
   entry->foreign.port = hdr->src;
   entry->len = len - sizeof(*hdr);
-  memcpy(entry + sizeof(*entry), data + sizeof(*hdr), len - sizeof(*hdr));
+  memcpy((uint8_t *) entry + sizeof(*entry), data + sizeof(*hdr), len - sizeof(*hdr));
   if (!queue_push(&pcb->queue, entry)) {
     pthread_mutex_unlock(&mutex);
     errorf("queue_push() failure");
@@ -381,9 +379,18 @@ ssize_t udp_sendto(int id, uint8_t *data, size_t len, struct udp_endpoint *forei
     debugf("select local address, addr=%s", ip_addr_ntop(local.addr, addr, sizeof(addr)));
   }
   if (!pcb->local.port) {
-    pthread_mutex_unlock(&mutex);
-    errorf("local port is required");
-    return -1;
+    for (p = UDP_SOURCE_PORT_MIN; p <= UDP_SOURCE_PORT_MAX; p++) {
+      if (!udp_pcb_select(local.addr, hton16(p))) {
+        pcb->local.port = hton16(p);
+        debugf("dynamic assign local port, port=%d", p);
+        break;
+      }
+    }
+    if (!pcb->local.port) {
+      pthread_mutex_unlock(&mutex);
+      debugf("failed to dinamic assign local port, addr=%s", ip_addr_ntop(local.addr, addr, sizeof(addr)));
+      return -1;
+    }
   }
   local.port = pcb->local.port;
   pthread_mutex_unlock(&mutex);
@@ -415,7 +422,7 @@ ssize_t udp_recvfrom(int id, uint8_t *buf, size_t size, struct udp_endpoint *for
     *foreign = entry->foreign;
   }
   len = MIN(size, entry->len); /* truncate */
-  memcpy(buf, entry + 1, len);
+  memcpy(buf, (uint8_t *) entry + sizeof(*entry), len);
   free(entry);
   return len;
 }
