@@ -37,6 +37,19 @@ struct net_timer {
   void (*handler)(void);
 };
 
+struct net_interrupt_ctx {
+  struct net_interrupt_ctx *prev;
+  struct net_interrupt_ctx *next;
+  int occurred;
+};
+
+static struct {
+  struct net_interrupt_ctx *head;
+  pthread_mutex_t mutex;
+} interrupts;
+
+static volatile sig_atomic_t interrupted;
+
 /* NOTE: if you want to add/delete the entries after net_run(), you need to protect these lists with a mutex. */
 static struct net_device *devices;
 // ネットワーク層のプロトコルリスト
@@ -251,6 +264,7 @@ static void *net_thread(void *arg) {
   struct net_protocol_queue_entry *entry;
   struct net_timer *timer;
   struct timeval now, diff;
+  struct net_interrupt_ctx *ctx;
 
   while (!terminate) {
     count = 0;
@@ -273,8 +287,8 @@ static void *net_thread(void *arg) {
       if (entry) {
         debugf("queue popped (num:%u), dev=%s, type=0x%04x, len=%zd", num,
                entry->dev->name, proto->type, entry->len);
-        debugdump((uint8_t *) (entry + 1), entry->len);
-        proto->handler((uint8_t *) (entry + 1), entry->len, entry->dev);
+        debugdump((uint8_t * )(entry + 1), entry->len);
+        proto->handler((uint8_t * )(entry + 1), entry->len, entry->dev);
         free(entry);
         count++;
       }
@@ -286,6 +300,16 @@ static void *net_thread(void *arg) {
         timer->handler();
         gettimeofday(&timer->last, NULL);
       }
+    }
+
+    if (interrupted) {
+      debugf("interrupt occurred");
+      pthread_mutex_lock(&interrupts.mutex);
+      for (ctx = interrupts.head; ctx; ctx = ctx->next) {
+        ctx->occurred = 1;
+      }
+      pthread_mutex_unlock(&interrupts.mutex);
+      interrupted = 0;
     }
 
     // 何も処理が行われなかったとき
@@ -336,6 +360,52 @@ void net_shutdown(void) {
     net_device_close(dev);
   }
   debugf("shutdown");
+}
+
+void net_interrupt(void) {
+  interrupted = 1;
+}
+
+struct net_interrupt_ctx *net_interrupt_subscribe(void) {
+  struct net_interrupt_ctx *ctx;
+
+  ctx = calloc(1, sizeof(struct net_interrupt_ctx));
+  if (!ctx) {
+    errorf("calloc() failure");
+    return NULL;
+  }
+  pthread_mutex_lock(&interrupts.mutex);
+  if (interrupts.head) {
+    ctx->next = interrupts.head;
+    interrupts.head->prev = ctx;
+  }
+  interrupts.head = ctx;
+  pthread_mutex_unlock(&interrupts.mutex);
+  return ctx;
+}
+
+int net_interrupt_occurred(struct net_interrupt_ctx *ctx) {
+  int occurred;
+
+  pthread_mutex_lock(&interrupts.mutex);
+  occurred = ctx->occurred;
+  pthread_mutex_unlock(&interrupts.mutex);
+  return occurred;
+}
+
+int net_interrupt_unsubscribe(struct net_interrupt_ctx *ctx) {
+  pthread_mutex_lock(&interrupts.mutex);
+  if (interrupts.head == ctx) {
+    interrupts.head = ctx->next;
+  }
+  if (ctx->next) {
+    ctx->next->prev = ctx->prev;
+  }
+  if (ctx->prev) {
+    ctx->prev->next = ctx->next;
+  }
+  pthread_mutex_unlock(&interrupts.mutex);
+  return 0;
 }
 
 int net_init(void) {
