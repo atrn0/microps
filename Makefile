@@ -1,6 +1,6 @@
 APPS = 
 
-TESTS = test/step19.exe \
+TESTS = test/step20.exe \
 
 DRIVERS = driver/null.o \
           driver/loopback.o \
