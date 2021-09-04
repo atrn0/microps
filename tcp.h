@@ -16,6 +16,9 @@ struct tcp_endpoint {
 extern int tcp_endpoint_pton(char *p, struct tcp_endpoint *n);
 extern char *tcp_endpoint_ntop(struct tcp_endpoint *n, char *p, size_t size);
 
+extern int tcp_open_rfc793(struct tcp_endpoint *local, struct tcp_endpoint *foreign, int active);
+extern int tcp_close(int id);
+
 extern int tcp_init(void);
 
 #endif
