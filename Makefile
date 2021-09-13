@@ -1,7 +1,6 @@
 APPS = 
 
-TESTS = test/step18-1.exe \
-		test/step18-2.exe
+TESTS = test/step21.exe \
 
 DRIVERS = driver/null.o \
           driver/loopback.o \
@@ -13,6 +12,7 @@ OBJS = util.o \
        arp.o \
        icmp.o \
        udp.o \
+       tcp.o \
 
 CFLAGS := $(CFLAGS) -v -g -W -Wall -Wno-unused-parameter -D_DEFAULT_SOURCE -I .
 
